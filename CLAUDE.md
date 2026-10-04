@@ -61,7 +61,7 @@ Discipline-specific tools are documented in their respective skill files. The to
 |------|---------|-------------|
 | Ghidra | `ghidra` | NSA's software reverse engineering suite with decompiler; supports x86, x64, ARM, ARM64, MIPS, and more |
 | radare2 | `r2 binary` | CLI-first RE framework for disassembly, analysis, patching, and debugging |
-| rizin | `rizin binary` | Modern radare2 fork with improved APIs and Ghidra decompiler integration via rz-ghidra |
+| rizin | `rizin -A binary` then `pdg` | Modern radare2 fork with improved APIs; the bundled rz-ghidra plugin decompiles the current function with the Ghidra decompiler (`pdg`, plus `pdgj`/`pdgo` for JSON/offset views) |
 | binwalk | `binwalk firmware.bin` | Scan and extract embedded files, compressed streams, and filesystems from binaries |
 
 ### Dynamic Instrumentation

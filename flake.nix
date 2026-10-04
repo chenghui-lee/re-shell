@@ -117,6 +117,29 @@
             rm -f $out/bin/wcurl $out/share/man/man1/wcurl.1*
           '';
 
+          # rz-ghidra installs its plugin dylibs under lib/rizin/plugins but
+          # bakes install_names pointing at lib/, so on Darwin dlopen fails with
+          # "Library not loaded: .../lib/core_ghidra.dylib". Rewrite the
+          # references to the real location. Linux uses RPATH and loads the
+          # stock package fine, so leave it alone there to keep the cache hit.
+          rz-ghidra =
+            if pkgs.stdenv.hostPlatform.isDarwin then
+              pkgs.rizin.plugins.rz-ghidra.overrideAttrs (old: {
+                postFixup = (old.postFixup or "") + ''
+                  find $out/lib/rizin/plugins -name '*.dylib' -print0 | while IFS= read -r -d "" lib; do
+                    otool -L "$lib" | awk 'NR>1 && $1 ~ /\.dylib$/ {print $1}' | grep "^$out/lib/" | while read -r old; do
+                      install_name_tool -change "$old" "$out/lib/rizin/plugins/$(basename "$old")" "$lib"
+                    done
+                  done
+                '';
+              })
+            else
+              pkgs.rizin.plugins.rz-ghidra;
+
+          # Modern fork of radare2, with the rz-ghidra plugin bundled so the
+          # Ghidra decompiler is available as `pdg`.
+          rizin = pkgs.rizin.withPlugins (_: [ rz-ghidra ]);
+
           # A dir-of-symlinks of common wordlists/rules so cracking tools don't
           # require /nix/store spelunking. Linked into $repoRoot/wordlists by the
           # shellHook below. Add more entries here as needed.
@@ -160,7 +183,7 @@
             # --- General: native binary reverse engineering ---
             pkgs.ghidra # NSA's SRE suite (disassembler + decompiler)
             pkgs.radare2 # UNIX-like RE framework and CLI toolset
-            pkgs.rizin # Modern fork of radare2
+            rizin # Modern fork of radare2 + rz-ghidra (Ghidra decompiler via `pdg`)
             pkgs.binwalk # Firmware/binary analysis and extraction
 
             # --- General: dynamic instrumentation ---

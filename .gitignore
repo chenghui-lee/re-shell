@@ -24,3 +24,5 @@
 *.exe
 *.so
 *.uf2
+
+.DS_Store
