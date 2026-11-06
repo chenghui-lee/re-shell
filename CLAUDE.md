@@ -12,6 +12,7 @@ This environment is organized into a **general-purpose core** (this file) and **
 |-------|------|-------------|
 | Android RE | `.claude/skills/android/SKILL.md` | APK, DEX, smali, ADB, Android app analysis |
 | Windows RE | `.claude/skills/windows/SKILL.md` | PE, .exe, .dll, .sys, .NET, Windows binary analysis |
+| Linux RE | `.claude/skills/linux/SKILL.md` | ELF, embedded Linux executables, core dumps, GDB, qemu-user, strace |
 | Web RE | `.claude/skills/web/SKILL.md` | Protobuf, gRPC, HAR, HTTP API, WebSocket, TLS fingerprint, web scraping |
 
 ### Adding a New Discipline
@@ -71,6 +72,57 @@ Discipline-specific tools are documented in their respective skill files. The to
 | frida-tools | `frida -p <pid> -l script.js` | Inject JavaScript into running processes for runtime hooking |
 | frida-tools | `frida-ps` | List running processes (add `-U` for USB device, `-R` for remote) |
 | frida-tools | `frida-trace -p <pid> -i "open*"` | Auto-generate handler stubs for traced functions |
+
+### Debuggers and Hardware Debugging
+
+These tools are included in `re-tools` and the dev shell. The standalone
+`packages.<system>.debug-tools` bundle (`nix shell .#debug-tools`) installs only
+the platform's debugger tools, independently of unrelated static/Android tools.
+
+| Tool | Platform | Purpose |
+|------|----------|---------|
+| GDB | Linux | All target architectures enabled by nixpkgs; native, core, and remote debugging |
+| qemu-user | Linux | Run foreign Linux ELF executables, with `-g` for GDB and `QEMU_STRACE=1` for guest syscalls |
+| strace | Linux | Trace native Linux syscalls; it cannot trace guest syscalls through qemu-user |
+| LLDB | Darwin | Wrapper for `/usr/bin/xcrun lldb`; requires Xcode/Command Line Tools; Apple attach/signing restrictions still apply |
+| OpenOCD | Both | GDB server for supported JTAG/SWD adapters and targets |
+
+For Linux ELF workflows, load `.claude/skills/linux/SKILL.md`. On Darwin, run
+Linux execution and debugging inside `packages.<system>.analysis-vm`; see
+[the VM guide](docs/analysis-vm.md) for builds, sample exchange, and disk state.
+The VM uses the same nixpkgs pin and includes the Linux runtime tools, not the
+entire `re-tools` closure. `checks.<linux-system>.debug-smoke` exercises a static
+RISC-V executable through QEMU and GDB; Darwin has the formatting check only.
+
+Native macOS example:
+
+```sh
+lldb -- ./program argument
+# In LLDB: breakpoint set --name main; run; register read; thread backtrace
+```
+
+Use Apple's LLDB/debugserver pair on Darwin. The pinned nixpkgs LLVM LLDB
+crashes when opening Mach-O files on the current host, so `debug-tools` exposes
+the Apple debugger through a wrapper instead. If `xcrun` cannot find LLDB,
+install/select Xcode or Command Line Tools before native debugging.
+
+For an RP2040 connected through a CMSIS-DAP SWD probe:
+
+```sh
+openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg
+# In a second terminal, use GDB with ARM support (Linux GDB or arm-none-eabi-gdb
+# if provided by the embedded toolchain):
+gdb firmware.elf
+# target extended-remote localhost:3333
+# monitor reset halt
+# break main
+# continue
+```
+
+Choose the adapter and target configuration for the actual board. RP2350 and
+Espressif targets may require vendor-specific OpenOCD support; do not substitute
+RP2040 configuration. Use `monitor reset halt` only when resetting hardware is
+appropriate. Loading/flashing firmware is a separate write operation.
 
 ### Static Analysis
 

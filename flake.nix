@@ -140,6 +140,8 @@
           # Ghidra decompiler is available as `pdg`.
           rizin = pkgs.rizin.withPlugins (_: [ rz-ghidra ]);
 
+          debugTools = import ./nix/debug-tools.nix { inherit pkgs; };
+
           # A dir-of-symlinks of common wordlists/rules so cracking tools don't
           # require /nix/store spelunking. Linked into $repoRoot/wordlists by the
           # shellHook below. Add more entries here as needed.
@@ -312,6 +314,7 @@
             # --- Web: HTML parsing ---
             pkgs.pup # CLI HTML parser (like jq for HTML)
           ]
+          ++ debugTools
           ++ lib.optionals pkgs.stdenv.isLinux [
             # Linux-only: need the kernel i2c-dev interface (/dev/i2c-*), not available on Darwin.
             pkgs.v4l-utils # provides edid-decode (parse/validate EDID + CTA/DisplayID exts)
@@ -355,6 +358,22 @@
             paths = tools;
           };
 
+          debug-tools = pkgs.buildEnv {
+            name = "re-debug-tools";
+            paths = debugTools;
+          };
+
+          # The runner is built for the host; the guest uses the same CPU and
+          # pinned nixpkgs on Linux. Darwin needs a Linux builder for guest paths.
+          analysis-vm =
+            (nixpkgs.lib.nixosSystem {
+              system = "${pkgs.stdenv.hostPlatform.parsed.cpu.name}-linux";
+              modules = [
+                ./nix/analysis-vm.nix
+                { virtualisation.host.pkgs = pkgs; }
+              ];
+            }).config.system.build.vm;
+
           shell = pkgs.mkShell {
             packages = tools ++ devTools;
 
@@ -397,7 +416,7 @@
       devShells = lib.mapAttrs (_: s: { default = s.shell; }) perSystem;
 
       packages = lib.mapAttrs (_: s: {
-        inherit (s) re-tools;
+        inherit (s) re-tools debug-tools analysis-vm;
         default = s.re-tools;
       }) perSystem;
 
@@ -406,8 +425,14 @@
 
       formatter = eachSystem (pkgs: treefmtEval.${pkgs.stdenv.hostPlatform.system}.config.build.wrapper);
 
-      checks = eachSystem (pkgs: {
-        formatting = treefmtEval.${pkgs.stdenv.hostPlatform.system}.config.build.check self;
-      });
+      checks = eachSystem (
+        pkgs:
+        {
+          formatting = treefmtEval.${pkgs.stdenv.hostPlatform.system}.config.build.check self;
+        }
+        // lib.optionalAttrs pkgs.stdenv.isLinux {
+          debug-smoke = pkgs.callPackage ./nix/debug-smoke.nix { };
+        }
+      );
     };
 }
